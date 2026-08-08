@@ -1,0 +1,188 @@
+{
+  "info": {
+    "_postman_id": "2699f0ec-4940-4da8-b79c-e1d9d38e0ff6",
+    "name": "Premium POS Integration API",
+    "description": "Requests for the local Premium POS Integration API. Set the collection variables or import the accompanying environment before sending requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://localhost:7196",
+      "type": "string"
+    },
+    {
+      "key": "secretKey",
+      "value": "replace-with-your-20-character-key",
+      "type": "string"
+    },
+    {
+      "key": "moyassarWebhookSecret",
+      "value": "demo-webhook-secret",
+      "type": "string"
+    },
+    {
+      "key": "redboxWebhookSecret",
+      "value": "demo-webhook-secret",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "OpenAPI document (Development only)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/openapi/v1.json"
+      }
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Secret-Key",
+                "value": "{{secretKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"ORDER-1001\",\n  \"amount\": 125.50,\n  \"returnUrl\": \"https://example.com/payment/complete\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/payments/create"
+          }
+        },
+        {
+          "name": "Moyassar webhook — paid",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.variables.replaceIn(pm.request.body.raw);",
+                  "const secret = pm.variables.replaceIn('{{moyassarWebhookSecret}}');",
+                  "const signature = CryptoJS.HmacSHA256(body, secret).toString(CryptoJS.enc.Hex);",
+                  "pm.request.headers.upsert({ key: 'X-Moyassar-Signature', value: signature });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Secret-Key",
+                "value": "{{secretKey}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"replace-with-provider-payment-id\",\n  \"status\": \"paid\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/payments/webhook"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Deliveries",
+      "item": [
+        {
+          "name": "Create shipment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"ORDER-1001\",\n  \"recipient\": \"Customer name\",\n  \"address\": \"Full delivery address\",\n  \"weightKg\": 1.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/deliveries/create"
+          }
+        },
+        {
+          "name": "Redbox webhook — delivered",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.variables.replaceIn(pm.request.body.raw);",
+                  "const secret = pm.variables.replaceIn('{{redboxWebhookSecret}}');",
+                  "const signature = CryptoJS.HmacSHA256(body, secret).toString(CryptoJS.enc.Hex);",
+                  "pm.request.headers.upsert({ key: 'X-Redbox-Signature', value: signature });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"replace-with-provider-shipment-id\",\n  \"status\": \"delivered\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": "{{baseUrl}}/api/deliveries/webhook"
+          }
+        }
+      ]
+    }
+  ]
+}
