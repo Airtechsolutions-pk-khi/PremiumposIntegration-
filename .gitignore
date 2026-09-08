@@ -3,3 +3,5 @@
 ################################################################################
 
 /PremiumposIntegrationApi/appsettings.json
+/.vs
+/PremiumposIntegrationApi/obj/Debug/net9.0
