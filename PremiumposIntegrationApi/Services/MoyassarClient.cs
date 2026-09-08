@@ -19,18 +19,18 @@ public class MoyassarClient
 
     public record CreatePaymentResult(bool IsSuccess, string? ProviderPaymentId, string? RedirectUrl, string? ErrorMessage, string SerializedLog);
 
-    public async Task<CreatePaymentResult> CreatePaymentAsync(string orderId, decimal amount, string returnUrl, string? tenantId)
+    public async Task<CreatePaymentResult> CreatePaymentAsync(
+        string orderId,
+        decimal amount,
+        string returnUrl,
+        string? tenantId,
+        CardDetails cardDetails)
     {
         var client = _httpClientFactory.CreateClient("moyassar");
         var apiKey = _configuration["Moyassar:ApiKey"] ?? Environment.GetEnvironmentVariable("MOYASSAR_API_KEY") ?? "demo-key";
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(apiKey)));
 
-        var cardName = _configuration["Moyassar:TestCard:Name"] ?? "Test User";
-        var cardNumber = _configuration["Moyassar:TestCard:Number"] ?? "4111111111111111";
-        var cardCvc = _configuration["Moyassar:TestCard:Cvc"] ?? "123";
-        var cardMonth = _configuration["Moyassar:TestCard:Month"] ?? "05";
-        var cardYear = _configuration["Moyassar:TestCard:Year"] ?? "2026";
-
+        // Use card details from the client request instead of configuration
         var payload = new
         {
             amount = (int)(amount * 100),
@@ -41,11 +41,11 @@ public class MoyassarClient
             source = new
             {
                 type = "creditcard",
-                name = cardName,
-                number = cardNumber,
-                cvc = cardCvc,
-                month = cardMonth,
-                year = cardYear
+                name = cardDetails.Name,
+                number = cardDetails.Number,
+                cvc = cardDetails.Cvc,
+                month = cardDetails.Month,
+                year = cardDetails.Year
             }
         };
 
@@ -107,6 +107,7 @@ public class MoyassarClient
         }
     }
 
+    // GetPaymentStatusAsync and VerifyWebhook methods remain the same
     public async Task<string?> GetPaymentStatusAsync(string providerPaymentId)
     {
         var client = _httpClientFactory.CreateClient("moyassar");

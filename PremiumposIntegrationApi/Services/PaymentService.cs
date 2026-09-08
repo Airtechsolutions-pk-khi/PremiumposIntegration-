@@ -1,5 +1,6 @@
 using System.Text.Json;
 
+
 namespace PremiumposIntegrationApi.Services;
 
 public class PaymentService
@@ -15,11 +16,16 @@ public class PaymentService
 
     public record PaymentCreationResult(Payment Payment, string? RedirectUrl, bool IsSuccess, string? ErrorMessage, string SerializedLog);
 
-    public async Task<PaymentCreationResult> CreatePaymentForOrderAsync(string orderId, decimal amount, string returnUrl, string? tenantId)
+    public async Task<PaymentCreationResult> CreatePaymentForOrderAsync(
+        string orderId, 
+        decimal amount, 
+        string returnUrl, 
+        string? tenantId,
+        CardDetails cardDetails)
     {
         try
         {
-            var result = await _moyassarClient.CreatePaymentAsync(orderId, amount, returnUrl, tenantId);
+            var result = await _moyassarClient.CreatePaymentAsync(orderId, amount, returnUrl, tenantId, cardDetails);
 
             var payment = new Payment
             {
@@ -88,6 +94,7 @@ public class PaymentService
         }
     }
 
+    // MarkPaidAsync and MarkFailedAsync methods remain the same
     public async Task<bool> MarkPaidAsync(string providerPaymentId)
     {
         var payment = _dbContext.Payments.FirstOrDefault(p => p.ProviderPaymentId == providerPaymentId);

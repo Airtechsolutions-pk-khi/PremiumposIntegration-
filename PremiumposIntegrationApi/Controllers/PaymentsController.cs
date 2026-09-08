@@ -25,13 +25,19 @@ public class PaymentsController : ControllerBase
     {
         try
         {
-            var tenantId ="Test-Tenantid";// User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var tenantId = "Test-Tenantid";// User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (string.IsNullOrWhiteSpace(tenantId))
             {
                 return Unauthorized(new { success = false, status = "failed", message = "Unauthorized request. Send a valid X-Secret-Key header." });
             }
 
-            var result = await _paymentService.CreatePaymentForOrderAsync(request.OrderId, request.Amount, request.ReturnUrl, tenantId);
+            var result = await _paymentService.CreatePaymentForOrderAsync(
+                request.OrderId,
+                request.Amount,
+                request.ReturnUrl,
+                tenantId,
+                request.CardDetails);
+
             var response = new
             {
                 success = result.IsSuccess,
@@ -89,5 +95,5 @@ public class PaymentsController : ControllerBase
         return Ok();
     }
 
-    public record CreatePaymentRequest(string OrderId, decimal Amount, string ReturnUrl);
+    public record CreatePaymentRequest(string OrderId, decimal Amount, string ReturnUrl, CardDetails CardDetails);
 }

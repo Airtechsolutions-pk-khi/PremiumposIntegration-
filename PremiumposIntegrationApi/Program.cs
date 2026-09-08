@@ -23,6 +23,21 @@ builder.Services.AddScoped<TenantSecretKeyValidator>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<DeliveryService>();
 
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy
+            .WithOrigins(
+                "http://localhost:5173",
+                "http://fooddelivery.premium-pos.com"
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
+
 builder.Services.AddControllers();
 builder.Services
     .AddAuthentication(SecretKeyAuthenticationHandler.SchemeName)
@@ -41,6 +56,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("AllowFrontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));

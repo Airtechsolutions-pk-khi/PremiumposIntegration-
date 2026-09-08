@@ -85,3 +85,12 @@ public class Shipment
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
+
+public class CardDetails
+{
+    public string Name { get; set; } = string.Empty;
+    public string Number { get; set; } = string.Empty;
+    public string Cvc { get; set; } = string.Empty;
+    public string Month { get; set; } = string.Empty;
+    public string Year { get; set; } = string.Empty;
+}
