@@ -12,6 +12,11 @@ builder.Services.AddHttpClient("moyassar", client =>
     client.BaseAddress = new Uri(builder.Configuration["Moyassar:BaseUrl"] ?? "https://api.moyasar.com/");
 });
 
+builder.Services.AddHttpClient("leajlak", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Leajlak:BaseUrl"] ?? "https://staging.4ulogistic.com/api/partner-v2");
+});
+
 builder.Services.AddHttpClient("redbox", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Redbox:BaseUrl"] ?? "https://api.redbox.example/");
@@ -19,6 +24,7 @@ builder.Services.AddHttpClient("redbox", client =>
 
 builder.Services.AddScoped<MoyassarClient>();
 builder.Services.AddScoped<RedboxClient>();
+builder.Services.AddScoped<LeajlakClient>();
 builder.Services.AddScoped<TenantSecretKeyValidator>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<DeliveryService>();
