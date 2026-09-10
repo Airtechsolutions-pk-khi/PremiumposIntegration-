@@ -27,17 +27,27 @@ public class PaymentService
     }
 
     public async Task<(string PaymentId, string RedirectUrl)> CreateInvoiceForOrderAsync(
-        string orderId, decimal amountSar, string currency)
+      string orderId, decimal amountSar, string currency,
+      string? successUrlOverride = null,
+      string? backUrlOverride = null)
     {
         long amountHalalas = (long)(amountSar * 100);
+
+        var successUrl = !string.IsNullOrWhiteSpace(successUrlOverride)
+            ? successUrlOverride
+            : $"{_configuration["Moyassar:FrontendBaseUrl"]}/payment/result?orderId={orderId}";
+
+        var backUrl = !string.IsNullOrWhiteSpace(backUrlOverride)
+            ? backUrlOverride
+            : $"{_configuration["Moyassar:FrontendBaseUrl"]}/payment/result?orderId={orderId}";
 
         var invoice = await _moyassarClient.CreateInvoiceAsync(
             amountHalalas,
             currency,
             $"Order {orderId}",
             callbackUrl: $"{_configuration["Moyassar:BaseUrl"]}/api/payments/webhook",
-            successUrl: $"{_configuration["Moyassar:FrontendBaseUrl"]}/payment/result?orderId={orderId}",
-            backUrl: $"{_configuration["Moyassar:FrontendBaseUrl"]}/payment/result?orderId={orderId}",
+            successUrl: successUrl,
+            backUrl: backUrl,
             expiredAtUtc: DateTime.UtcNow.AddMinutes(30),
             metadata: new Dictionary<string, string> { ["order_id"] = orderId });
 

@@ -4,14 +4,14 @@ namespace PremiumposIntegrationApi;
 
 public enum PaymentStatus
 {
-    Initiated = 1,
-    Pending = 2,
-    Paid = 3,
+    Initiated = 1, // Invoice created at Moyasar, redirect URL returned to frontend
+    Pending = 2, // User is on the Moyasar page / no final result yet
+    Paid = 3, // Verified paid (webhook + Fetch Invoice double-check)
     Failed = 4,
     Expired = 5,
-    Cancelled = 6,
-    Refunding = 7,
-    Refunded = 8
+    Cancelled = 6, // User hit "back" / abandoned before paying
+    Refunded = 7,
+    Refunding = 8
 }
 // Mirrors FoodCarrier's existing PaymentMode ints — keep in sync
 public enum PaymentMethodType

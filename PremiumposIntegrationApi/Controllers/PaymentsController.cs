@@ -27,7 +27,11 @@ public class PaymentsController : ControllerBase
         try
         {
             var result = await _paymentService.CreateInvoiceForOrderAsync(
-                request.OrderId, request.Amount, request.Currency ?? "SAR");
+                request.OrderId,
+                request.Amount,
+                request.Currency ?? "SAR",
+                request.SuccessUrl,
+                request.BackUrl);
 
             return Ok(new
             {
@@ -92,7 +96,12 @@ public class PaymentsController : ControllerBase
         return Ok();
     }
 
-    public record CreateInvoiceRequest(string OrderId, decimal Amount, string Currency);
+    public record CreateInvoiceRequest(
+    string OrderId,
+    decimal Amount,
+    string? Currency,
+    string? SuccessUrl,
+    string? BackUrl);
 
     [HttpPost("refund")]
     public async Task<IActionResult> Refund([FromBody] RefundRequest request)
