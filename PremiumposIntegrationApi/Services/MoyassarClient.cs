@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace PremiumposIntegrationApi.Services;
 
@@ -10,137 +11,165 @@ public class MoyassarClient
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
+    private readonly HttpClient _http;
+    private readonly string _secretKey;
+    private readonly string _webhookSecret;
 
     public MoyassarClient(IHttpClientFactory httpClientFactory, IConfiguration configuration)
     {
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
+
+        _secretKey = configuration["Moyasar:SecretKey"] ?? configuration["Moyassar:ApiKey"] ??
+                     Environment.GetEnvironmentVariable("MOYASSAR_API_KEY") ?? "demo-key";
+        _webhookSecret = configuration["Moyasar:WebhookSecret"] ??
+                         Environment.GetEnvironmentVariable("MOYASSAR_WEBHOOK_SECRET") ?? "demo-webhook-secret";
+
+        _http = _httpClientFactory.CreateClient("moyassar");
+        var authBytes = Encoding.UTF8.GetBytes($"{_secretKey}:");
+        _http.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Basic", Convert.ToBase64String(authBytes));
+        _http.BaseAddress = new Uri("https://api.moyasar.com/v1/");
     }
 
-    public record CreatePaymentResult(bool IsSuccess, string? ProviderPaymentId, string? RedirectUrl, string? ErrorMessage, string SerializedLog);
+    // ==================== CREATE INVOICE ====================
 
-    public async Task<CreatePaymentResult> CreatePaymentAsync(
-        string orderId,
-        decimal amount,
-        string returnUrl,
-        string? tenantId,
-        CardDetails cardDetails)
+    public async Task<MoyasarInvoice> CreateInvoiceAsync(
+        long amountInHalalas, string currency, string description,
+        string callbackUrl, string successUrl, string backUrl,
+        DateTime expiredAtUtc, Dictionary<string, string> metadata)
     {
-        var client = _httpClientFactory.CreateClient("moyassar");
-        var apiKey = _configuration["Moyassar:ApiKey"] ?? Environment.GetEnvironmentVariable("MOYASSAR_API_KEY") ?? "demo-key";
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(apiKey)));
+        var payload = new CreateInvoiceRequest(
+            Amount: amountInHalalas,
+            Currency: currency,
+            Description: description,
+            CallbackUrl: callbackUrl,
+            SuccessUrl: successUrl,
+            BackUrl: backUrl,
+            ExpiredAt: expiredAtUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ"),
+            Metadata: metadata);
 
-        // Use card details from the client request instead of configuration
-        var payload = new
-        {
-            amount = (int)(amount * 100),
-            currency = "SAR",
-            description = $"Payment for order {orderId}",
-            callback_url = returnUrl,
-            metadata = new { orderId, tenantId },
-            source = new
-            {
-                type = "creditcard",
-                name = cardDetails.Name,
-                number = cardDetails.Number,
-                cvc = cardDetails.Cvc,
-                month = cardDetails.Month,
-                year = cardDetails.Year
-            }
-        };
+        var resp = await _http.PostAsJsonAsync("invoices", payload);
+        var body = await resp.Content.ReadAsStringAsync();
 
-        var requestLog = new
-        {
-            operation = "create_payment",
-            provider = "moyassar",
-            endpoint = "/v1/payments",
-            tenantId,
-            payload,
-            timestamp = DateTime.UtcNow
-        };
+        if (!resp.IsSuccessStatusCode)
+            throw new MoyasarApiException($"Invoice creation failed: {resp.StatusCode} - {body}");
 
-        try
-        {
-            var response = await client.PostAsJsonAsync("/v1/payments", payload);
-            var responseBody = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var failureLog = new
-                {
-                    requestLog,
-                    statusCode = (int)response.StatusCode,
-                    responseBody,
-                    result = "failed",
-                    errorMessage = "Moyassar rejected the payment creation request."
-                };
-
-                return new CreatePaymentResult(false, null, null, "Payment creation failed", JsonSerializer.Serialize(failureLog));
-            }
-
-            var json = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(responseBody);
-            var providerId = GetStringValue(json, "id") ?? Guid.NewGuid().ToString();
-            var redirect = GetStringValue(json, "checkout_url") ?? returnUrl;
-
-            var successLog = new
-            {
-                requestLog,
-                statusCode = (int)response.StatusCode,
-                responseBody,
-                result = "success",
-                providerPaymentId = providerId,
-                redirectUrl = redirect
-            };
-
-            return new CreatePaymentResult(true, providerId, redirect, null, JsonSerializer.Serialize(successLog));
-        }
-        catch (Exception ex)
-        {
-            var errorLog = new
-            {
-                requestLog,
-                result = "failed",
-                errorMessage = ex.Message
-            };
-
-            return new CreatePaymentResult(false, null, null, "Payment creation failed", JsonSerializer.Serialize(errorLog));
-        }
+        return JsonSerializer.Deserialize<MoyasarInvoice>(body) ??
+               throw new MoyasarApiException("Failed to deserialize invoice response");
     }
 
-    // GetPaymentStatusAsync and VerifyWebhook methods remain the same
-    public async Task<string?> GetPaymentStatusAsync(string providerPaymentId)
+    // ==================== FETCH INVOICE ====================
+
+    public async Task<MoyasarInvoice> FetchInvoiceAsync(string invoiceId)
     {
-        var client = _httpClientFactory.CreateClient("moyassar");
-        var apiKey = _configuration["Moyassar:ApiKey"] ?? Environment.GetEnvironmentVariable("MOYASSAR_API_KEY") ?? "demo-key";
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(apiKey)));
+        var resp = await _http.GetAsync($"invoices/{invoiceId}");
+        var body = await resp.Content.ReadAsStringAsync();
 
-        var response = await client.GetAsync($"/v1/payments/{providerPaymentId}");
-        if (!response.IsSuccessStatusCode)
-        {
-            return null;
-        }
+        if (!resp.IsSuccessStatusCode)
+            throw new MoyasarApiException($"Fetch invoice failed: {resp.StatusCode} - {body}");
 
-        var json = await response.Content.ReadFromJsonAsync<Dictionary<string, object?>>();
-        return json?.GetValueOrDefault("status")?.ToString();
+        return JsonSerializer.Deserialize<MoyasarInvoice>(body) ??
+               throw new MoyasarApiException("Failed to deserialize invoice response");
     }
 
-    public bool VerifyWebhook(byte[] payloadBody, string signatureHeader)
+    // ==================== VERIFY WEBHOOK ====================
+
+    public bool VerifyWebhookSecret(JsonElement root)
     {
-        var secret = _configuration["Moyassar:WebhookSecret"] ?? "demo-webhook-secret";
-        using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
-        var hash = Convert.ToHexString(hmac.ComputeHash(payloadBody)).ToLowerInvariant();
+        if (!root.TryGetProperty("secret_token", out var tokenProp))
+            return false;
 
-        return signatureHeader.Equals(hash, StringComparison.OrdinalIgnoreCase)
-            || signatureHeader.Equals($"sha256={hash}", StringComparison.OrdinalIgnoreCase);
+        var received = tokenProp.GetString() ?? "";
+        return CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(received),
+            Encoding.UTF8.GetBytes(_webhookSecret));
     }
 
-    private static string? GetStringValue(Dictionary<string, JsonElement>? json, string key)
+    // ==================== REFUND INVOICE ====================
+
+    public async Task<bool> RefundInvoiceAsync(string invoiceId, string reason)
     {
-        if (json is null || !json.TryGetValue(key, out var value))
-        {
-            return null;
-        }
+        var payload = new RefundRequest(Reason: reason);
+        var resp = await _http.PostAsJsonAsync($"invoices/{invoiceId}/refund", payload);
+        var body = await resp.Content.ReadAsStringAsync();
 
-        return value.ValueKind == JsonValueKind.String ? value.GetString() : value.ToString();
+        if (!resp.IsSuccessStatusCode)
+            throw new MoyasarApiException($"Refund failed: {resp.StatusCode} - {body}");
+
+        return true;
     }
+}
+
+// ==================== REQUEST DTOs (snake_case) ====================
+
+public record CreateInvoiceRequest(
+    [property: JsonPropertyName("amount")] long Amount,
+    [property: JsonPropertyName("currency")] string Currency,
+    [property: JsonPropertyName("description")] string Description,
+    [property: JsonPropertyName("callback_url")] string CallbackUrl,
+    [property: JsonPropertyName("success_url")] string SuccessUrl,
+    [property: JsonPropertyName("back_url")] string BackUrl,
+    [property: JsonPropertyName("expired_at")] string ExpiredAt,
+    [property: JsonPropertyName("metadata")] Dictionary<string, string> Metadata);
+
+public record RefundRequest(
+    [property: JsonPropertyName("reason")] string Reason);
+
+// ==================== RESPONSE DTO (snake_case) ====================
+
+public class MoyasarInvoice
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = "";
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";   // "initiated" | "paid" | "failed" | "expired" | "canceled" | "refunded"
+
+    [JsonPropertyName("amount")]
+    public long Amount { get; set; }
+
+    [JsonPropertyName("currency")]
+    public string Currency { get; set; } = "";
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("logo_url")]
+    public string? LogoUrl { get; set; }
+
+    [JsonPropertyName("amount_format")]
+    public string? AmountFormat { get; set; }
+
+    [JsonPropertyName("url")]
+    public string Url { get; set; } = "";      // <-- redirect URL for frontend
+
+    [JsonPropertyName("callback_url")]
+    public string? CallbackUrl { get; set; }
+
+    [JsonPropertyName("expired_at")]
+    public DateTime? ExpiredAt { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public DateTime? CreatedAt { get; set; }
+
+    [JsonPropertyName("updated_at")]
+    public DateTime? UpdatedAt { get; set; }
+
+    [JsonPropertyName("back_url")]
+    public string? BackUrl { get; set; }
+
+    [JsonPropertyName("success_url")]
+    public string? SuccessUrl { get; set; }
+
+    [JsonPropertyName("metadata")]
+    public Dictionary<string, string>? Metadata { get; set; }
+
+    [JsonPropertyName("payments")]
+    public List<JsonElement>? Payments { get; set; }
+}
+
+public class MoyasarApiException : Exception
+{
+    public MoyasarApiException(string message) : base(message) { }
 }

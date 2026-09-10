@@ -8,17 +8,21 @@ public class DeliveryService
     private readonly RedboxClient _redboxClient;
     private readonly LeajlakClient _leajlakClient;
     private readonly ILogger<DeliveryService> _logger;
+    private readonly ShipmentRepository _shipments;
+
 
     public DeliveryService(
         AppDbContext dbContext,
         RedboxClient redboxClient,
         LeajlakClient leajlakClient,
-        ILogger<DeliveryService> logger)
+        ILogger<DeliveryService> logger,
+        ShipmentRepository shipments)
     {
         _dbContext = dbContext;
         _redboxClient = redboxClient;
         _leajlakClient = leajlakClient;
         _logger = logger;
+        _shipments = shipments;
     }
 
     // Existing Redbox methods remain unchanged
@@ -34,28 +38,23 @@ public class DeliveryService
             Status = ShipmentStatus.Booked
         };
 
-        _dbContext.Shipments.Add(shipment);
-        await _dbContext.SaveChangesAsync();
+        var newId = await _shipments.CreateAsync(shipment);
+        shipment.Id = newId;
 
         return shipment;
     }
 
-    public async Task<bool> MarkDeliveredAsync(string providerShipmentId)
+    public async Task MarkDeliveredAsync(string providerShipmentId)
     {
-        var shipment = _dbContext.Shipments.FirstOrDefault(s => s.ProviderShipmentId == providerShipmentId);
-        if (shipment is null)
-        {
-            return false;
-        }
-
-        shipment.Status = ShipmentStatus.Delivered;
-        await _dbContext.SaveChangesAsync();
-        return true;
+        await _shipments.UpdateStatusAsync(providerShipmentId, ShipmentStatus.Delivered);
     }
 
     // New Leajlak methods
-    public async Task<Shipment> CreateLeajlakOrderAsync(string orderId, string shopId, string customerName,
-        string customerPhone, string deliveryAddress, double latitude, double longitude, int paymentType, decimal total)
+    public async Task<Shipment> CreateLeajlakOrderAsync(
+       string orderId, string shopId,
+       string customerName, string customerPhone, string deliveryAddress,
+       double latitude, double longitude,
+       int paymentType, decimal total)
     {
         var leajlakRequest = new CreateOrderRequest(
             Id: orderId,
@@ -74,23 +73,24 @@ public class DeliveryService
         var shipment = new Shipment
         {
             OrderId = orderId,
-            ProviderShipmentId = result.Id.ToString(),
-            TrackingUrl = result.TrackingNumber,
-            Status = ShipmentStatus.Booked
+            ProviderShipmentId = result.DspOrderId,
+            TrackingUrl = null,
+            Status = ShipmentStatus.Booked,
+            CreatedAt = DateTime.UtcNow
         };
 
-        _dbContext.Shipments.Add(shipment);
-        await _dbContext.SaveChangesAsync();
+  
+        var newId = await _shipments.CreateAsync(shipment);
+        shipment.Id = newId;
 
         return shipment;
     }
 
+
     public async Task<LeajlakOrderStatus> GetLeajlakOrderStatusAsync(string providerShipmentId)
     {
         if (!int.TryParse(providerShipmentId, out int leajlakOrderId))
-        {
             throw new ArgumentException("Invalid Leajlak order ID");
-        }
 
         var orderDetails = await _leajlakClient.GetOrderDetailsAsync(leajlakOrderId);
 
@@ -106,24 +106,17 @@ public class DeliveryService
     public async Task<bool> CancelLeajlakOrderAsync(string providerShipmentId)
     {
         if (!int.TryParse(providerShipmentId, out int leajlakOrderId))
-        {
             return false;
-        }
 
         await _leajlakClient.CancelOrderAsync(leajlakOrderId);
 
-        var shipment = await _dbContext.Shipments
-            .FirstOrDefaultAsync(s => s.ProviderShipmentId == providerShipmentId);
+        var shipment = await _shipments.GetByProviderShipmentIdAsync(providerShipmentId);
+        if (shipment is null) return false;
 
-        if (shipment is null)
-        {
-            return false;
-        }
-
-        shipment.Status = ShipmentStatus.Cancelled;
-        await _dbContext.SaveChangesAsync();
+        await _shipments.UpdateStatusAsync(providerShipmentId, ShipmentStatus.Cancelled);
         return true;
     }
+
 }
 
 public record LeajlakOrderStatus(

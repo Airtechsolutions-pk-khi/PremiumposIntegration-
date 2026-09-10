@@ -4,44 +4,46 @@ namespace PremiumposIntegrationApi;
 
 public enum PaymentStatus
 {
-    Pending,
-    Paid,
-    Failed
+    Initiated = 1,
+    Pending = 2,
+    Paid = 3,
+    Failed = 4,
+    Expired = 5,
+    Cancelled = 6,
+    Refunding = 7,
+    Refunded = 8
+}
+// Mirrors FoodCarrier's existing PaymentMode ints — keep in sync
+public enum PaymentMethodType
+{
+    CashOnDelivery = 1,
+    Card = 2,
+    BenefitPay = 3
 }
 
 public enum ShipmentStatus
 {
-    Pending,
-    Booked,
-    InTransit,
-    Delivered,
-    Cancelled
+    Booked = 1,
+    Assigned = 2,
+    PickedUp = 3,
+    Delivered = 4,
+    Failed = 5,
+    Cancelled = 6
 }
+
 
 public class Payment
 {
-    [Key]
-    public Guid Id { get; set; } = Guid.NewGuid();
-
-    [Required]
-    public string OrderId { get; set; } = string.Empty;
-
-    public string Provider { get; set; } = "moyassar";
-
-    public string? ProviderPaymentId { get; set; }
-
+    public int Id { get; set; }
+    public string OrderId { get; set; } = "";
+    public string ProviderInvoiceId { get; set; } = "";
     public decimal Amount { get; set; }
-
-    public string? TenantId { get; set; }
-
-    public string Currency { get; set; } = "SAR";
-
-    public PaymentStatus Status { get; set; } = PaymentStatus.Pending;
-
-    public string? Metadata { get; set; }
-
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public PaymentStatus Status { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
 }
+
+
 
 public class PaymentLog
 {
@@ -67,24 +69,18 @@ public class PaymentLog
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 
+
 public class Shipment
 {
-    [Key]
-    public Guid Id { get; set; } = Guid.NewGuid();
-
-    [Required]
-    public string OrderId { get; set; } = string.Empty;
-
-    public string Provider { get; set; } = "redbox";
-
-    public string? ProviderShipmentId { get; set; }
-
-    public ShipmentStatus Status { get; set; } = ShipmentStatus.Pending;
-
+    public int Id { get; set; }
+    public string OrderId { get; set; } = "";
+    public string ProviderShipmentId { get; set; } = "";
     public string? TrackingUrl { get; set; }
-
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public ShipmentStatus Status { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
 }
+
 
 public class CardDetails
 {
